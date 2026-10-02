@@ -109,6 +109,8 @@ const publicUser = (u) => ({
 // ---- auth ----
 app.post('/api/register', async (req, res) => {
   const { username, password, gender = '', country = '' } = req.body || {};
+  if (req.body?.age_ok !== true)
+    return res.status(400).json({ error: 'You must confirm you are 18 or older.' });
   if (!username || !/^[a-zA-Z0-9_]{3,20}$/.test(username))
     return res.status(400).json({ error: 'username: 3-20 letters/numbers/_' });
   if (!password || password.length < 6)
@@ -172,6 +174,9 @@ app.post('/api/auth/google', async (req, res) => {
     });
     const p = ticket.getPayload();
     if (!p.email_verified) return res.status(401).json({ error: 'email not verified' });
+    const ex = await pool.query('SELECT id FROM users WHERE oauth_provider = $1 AND oauth_sub = $2', ['google', p.sub]);
+    if (!ex.rows[0] && req.body?.age_ok !== true)
+      return res.status(400).json({ error: 'You must confirm you are 18 or older.' });
     const u = await findOrCreateOAuthUser('google', p.sub, p.email);
     if (u.banned_until > now()) return res.status(403).json({ error: 'account temporarily banned' });
     res.json({ token: tokenFor(u.id), user: publicUser(u) });

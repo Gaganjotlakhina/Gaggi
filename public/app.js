@@ -45,7 +45,10 @@ $('authGo').onclick = async () => {
   $('authErr').textContent = '';
   try {
     const body = { username: $('aUser').value.trim(), password: $('aPass').value };
-    if (state.mode === 'register') { body.gender = $('aGender').value; body.country = $('aCountry').value.trim(); }
+    if (state.mode === 'register') {
+      if (!$('aAge').checked) { $('authErr').textContent = 'Please confirm you are 18 or older.'; return; }
+      body.gender = $('aGender').value; body.country = $('aCountry').value.trim(); body.age_ok = true;
+    }
     const j = await api(state.mode === 'login' ? '/api/login' : '/api/register', { method: 'POST', body });
     state.token = j.token; localStorage.setItem('tassi20', j.token); state.user = j.user;
     $('authModal').classList.add('hidden'); paintAuth();
@@ -65,7 +68,12 @@ async function initGoogle() {
         callback: async (resp) => {
           $('authErr').textContent = '';
           try {
-            const j = await api('/api/auth/google', { method: 'POST', body: { credential: resp.credential } });
+            const body = { credential: resp.credential };
+            if (state.mode === 'register') {
+              if (!$('aAge').checked) { $('authErr').textContent = 'Please confirm you are 18 or older.'; return; }
+              body.age_ok = true;
+            }
+            const j = await api('/api/auth/google', { method: 'POST', body });
             state.token = j.token; localStorage.setItem('tassi20', j.token); state.user = j.user;
             $('authModal').classList.add('hidden'); paintAuth();
             sys(`Welcome, ${j.user.username}! Signed in with Google 🪙`);
