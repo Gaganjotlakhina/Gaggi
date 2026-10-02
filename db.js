@@ -80,4 +80,39 @@ async function addCoins(userId, delta, reason, meta = '') {
   return r.rows[0].coins;
 }
 
-module.exports = { pool, init, now, getUser, addCoins };
+// Atomic coin transfer: debits sender and credits receiver in ONE transaction,
+// so a gift can never vanish halfway (no lost coins on failure).
+async function transferCoins(fromId, toId, amount, giftLabel = '') {
+  if (!Number.isInteger(amount) || amount <= 0) throw new Error('bad amount');
+  if (fromId === toId) throw new Error('cannot gift yourself');
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    // Lock both rows in id order to avoid deadlocks under concurrency.
+    const ids = [fromId, toId].sort((a, b) => a - b);
+    const r = await c.query('SELECT id, coins FROM users WHERE id = ANY($1) ORDER BY id', [ids]);
+    if (r.rows.length !== 2) throw new Error('user not found');
+    const bal = Object.fromEntries(r.rows.map((x) => [x.id, x.coins]));
+    if (bal[fromId] < amount) throw new Error('not enough coins');
+    await c.query('UPDATE users SET coins = coins - $1 WHERE id = $2', [amount, fromId]);
+    await c.query('UPDATE users SET coins = coins + $1 WHERE id = $2', [amount, toId]);
+    const t = now();
+    await c.query(
+      'INSERT INTO coin_transactions (user_id, delta, reason, meta, created_at) VALUES ($1,$2,$3,$4,$5)',
+      [fromId, -amount, 'gift_sent', `${giftLabel} to:${toId}`, t]
+    );
+    await c.query(
+      'INSERT INTO coin_transactions (user_id, delta, reason, meta, created_at) VALUES ($1,$2,$3,$4,$5)',
+      [toId, amount, 'gift_received', `${giftLabel} from:${fromId}`, t]
+    );
+    await c.query('COMMIT');
+    return { fromBalance: bal[fromId] - amount, toBalance: bal[toId] + amount };
+  } catch (e) {
+    await c.query('ROLLBACK');
+    throw e;
+  } finally {
+    c.release();
+  }
+}
+
+module.exports = { pool, init, now, getUser, addCoins, transferCoins };

@@ -5,7 +5,7 @@ const http = require('http');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { WebSocketServer } = require('ws');
-const { pool, init, now, getUser, addCoins } = require('./db');
+const { pool, init, now, getUser, addCoins, transferCoins } = require('./db');
 
 const PORT = process.env.PORT || 3000;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
@@ -23,7 +23,20 @@ if (process.env.GOOGLE_CLIENT_ID) {
 
 const SIGNUP_BONUS = 100;
 const FILTERS_24H_COST = 100;
-const GIFT_AMOUNTS = [10, 25, 50, 100];
+const GIFT_CATALOG = [
+  { emoji: '🌹', name: 'Rose', amount: 1 },
+  { emoji: '☕', name: 'Coffee', amount: 5 },
+  { emoji: '🍫', name: 'Chocolate', amount: 10 },
+  { emoji: '🌸', name: 'Blossom', amount: 25 },
+  { emoji: '💐', name: 'Bouquet', amount: 50 },
+  { emoji: '🧸', name: 'Teddy', amount: 100 },
+  { emoji: '🎁', name: 'Gift Box', amount: 250 },
+  { emoji: '👑', name: 'Crown', amount: 500 },
+  { emoji: '🚀', name: 'Rocket', amount: 1000 },
+  { emoji: '🏎️', name: 'Sports Car', amount: 2500 },
+  { emoji: '💎', name: 'Diamond', amount: 5000 },
+];
+const GIFT_AMOUNTS = GIFT_CATALOG.map((g) => g.amount);
 const PACKAGES = {
   starter: { coins: 500, price_cents: 249, label: '500 coins' },
   popular: { coins: 1200, price_cents: 499, label: '1,200 coins' },
@@ -166,6 +179,7 @@ app.get('/api/coins/packages', (req, res) => {
     stripe_ready: !!stripe,
     packages: Object.entries(PACKAGES).map(([id, p]) => ({ id, ...p })),
     gift_amounts: GIFT_AMOUNTS,
+    gifts: GIFT_CATALOG,
     filters_cost: FILTERS_24H_COST,
     signup_bonus: SIGNUP_BONUS,
   });
@@ -325,19 +339,23 @@ wss.on('connection', (ws, req, userId) => {
     }
     else if (m.type === 'gift') {
       const amount = Number(m.amount);
+      const gift = GIFT_CATALOG.find((g) => g.amount === amount);
       const r = rooms.get(m.roomId);
-      if (!r || !GIFT_AMOUNTS.includes(amount)) return;
-      const me = await getUser(userId);
-      if (me.coins < amount) { ws.send(JSON.stringify({ type: 'error', error: 'not enough coins' })); return; }
+      if (!r || !gift) return;
       const peer = r.a === userId ? r.b : r.a;
-      await addCoins(userId, -amount, 'gift_sent', `to:${peer}`);
-      const peerBal = await addCoins(peer, amount, 'gift_received', `from:${userId}`);
-      pushCoins(userId, me.coins - amount);
-      pushCoins(peer, peerBal);
+      let balances;
+      try {
+        balances = await transferCoins(userId, peer, amount, `${gift.emoji} ${gift.name}`);
+      } catch (e) {
+        ws.send(JSON.stringify({ type: 'error', error: e.message === 'not enough coins' ? 'not enough coins' : 'gift failed, no coins moved' }));
+        return;
+      }
+      pushCoins(userId, balances.fromBalance);
+      pushCoins(peer, balances.toBalance);
       const pws = clients.get(peer);
       if (pws && pws.readyState === 1)
-        pws.send(JSON.stringify({ type: 'gift', roomId: m.roomId, from: u.username, amount }));
-      ws.send(JSON.stringify({ type: 'gift-sent', amount }));
+        pws.send(JSON.stringify({ type: 'gift', roomId: m.roomId, from: u.username, amount, emoji: gift.emoji, name: gift.name }));
+      ws.send(JSON.stringify({ type: 'gift-sent', amount, emoji: gift.emoji, name: gift.name }));
     }
   });
 

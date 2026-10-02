@@ -129,8 +129,8 @@ function connectWS() {
     else if (m.type === 'matched') onMatched(m);
     else if (m.type === 'signal') onSignal(m.data);
     else if (m.type === 'chat') addMsg(m.from, m.text);
-    else if (m.type === 'gift') { giftMsg(`${m.from} sent you 🪙${m.amount}!`); }
-    else if (m.type === 'gift-sent') giftMsg(`You sent 🪙${m.amount}`);
+    else if (m.type === 'gift') { giftMsg(`${m.from} sent you ${m.emoji || '🪙'} ${m.name || ''} (${m.amount} coins)!`); }
+    else if (m.type === 'gift-sent') giftMsg(`You sent ${m.emoji || '🪙'} ${m.name || ''} (${m.amount} coins)`);
     else if (m.type === 'peer-left') { sys('Stranger left.'); cleanupPeer(); setStatus('Finding someone new…'); ws.send(JSON.stringify({ type: 'queue', filters: curFilters() })); }
     else if (m.type === 'coins') { state.user.coins = m.balance; paintAuth(); }
     else if (m.type === 'error') { setStatus('⚠ ' + m.error); }
@@ -181,7 +181,10 @@ function sendChat() {
   state.ws.send(JSON.stringify({ type: 'chat', roomId: state.roomId, text: t }));
   addMsg('You', t); $('chatIn').value = '';
 }
-$('nextBtn').onclick = () => { if (!state.ws) return; cleanupPeer(); setStatus('Finding someone…'); state.ws.send(JSON.stringify({ type: 'leave' })); state.ws.send(JSON.stringify({ type: 'queue', filters: curFilters() })); };
+// These three actions only exist inside the signed-in chat view — but guard
+// explicitly anyway: no user, no ws connection => nothing happens.
+const requireChat = () => !!(state.user && state.ws && state.ws.readyState === 1);
+$('nextBtn').onclick = () => { if (!requireChat()) return; cleanupPeer(); setStatus('Finding someone…'); state.ws.send(JSON.stringify({ type: 'leave' })); state.ws.send(JSON.stringify({ type: 'queue', filters: curFilters() })); };
 $('stopBtn').onclick = stopAll;
 function stopAll() {
   try { state.ws && state.ws.send(JSON.stringify({ type: 'leave' })); state.ws && state.ws.close(); } catch {}
@@ -190,15 +193,17 @@ function stopAll() {
   state.local = null; showView('landing');
 }
 $('reportBtn').onclick = async () => {
-  if (!state.peer) return;
+  if (!requireChat() || !state.peer) return;
   if (!confirm(`Report ${state.peer.username}?`)) return;
   await api('/api/report', { method: 'POST', body: { reported_id: state.peer.id, reason: 'reported from chat' } });
   sys('Reported. Finding someone new…'); $('nextBtn').click();
 };
 $('giftBtn').onclick = async () => {
-  if (!state.peer) return;
-  const { gift_amounts } = await api('/api/coins/packages');
-  $('giftBtns').innerHTML = gift_amounts.map(a => `<button class="btn" data-a="${a}">🪙${a}</button>`).join('');
+  if (!requireChat() || !state.peer) return;
+  const { gifts } = await api('/api/coins/packages');
+  $('giftBtns').innerHTML = gifts.map(g =>
+    `<button class="gift-pick" data-a="${g.amount}" title="${g.name} · ${g.amount} coins"><span class="ge">${g.emoji}</span><span class="ga">🪙${g.amount}</span><span class="gn">${g.name}</span></button>`
+  ).join('');
   $('giftBtns').querySelectorAll('button').forEach(b => b.onclick = () => {
     state.ws.send(JSON.stringify({ type: 'gift', roomId: state.roomId, amount: Number(b.dataset.a) }));
     $('giftModal').classList.add('hidden');
