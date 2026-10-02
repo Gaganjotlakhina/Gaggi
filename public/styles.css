@@ -28,6 +28,16 @@ body {
     #0b0910;
   background-attachment: fixed;
 }
+/* cinematic ambient backdrop — fixed full-page layer behind everything */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -2;
+  background: url('img/ambient-bg.webp') center / cover no-repeat;
+  opacity: .5;
+}
+body::after {
+  content: ''; position: fixed; inset: 0; z-index: -1;
+  background: linear-gradient(180deg, rgba(11,9,16,.42), rgba(11,9,16,.55) 45%, rgba(11,9,16,.88));
+}
 .hidden { display: none !important; }
 
 /* ---------- header ---------- */
