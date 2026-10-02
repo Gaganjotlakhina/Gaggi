@@ -107,8 +107,11 @@ const RTC_CFG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls:
 async function startChat() {
   if (!state.user) { $('authModal').classList.remove('hidden'); return; }
   try {
-    state.local = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  } catch { alert('Camera + mic needed for video chat.'); return; }
+    state.local = await Promise.race([
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('cam-timeout')), 15000)),
+    ]);
+  } catch { alert('Camera + mic needed — please allow access and tap Start Chat again.'); return; }
   $('localV').srcObject = state.local;
   showView('chat'); $('msgs').innerHTML = '';
   connectWS();
