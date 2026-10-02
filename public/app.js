@@ -193,13 +193,15 @@ function stopAll() {
   state.local = null; showView('landing');
 }
 $('reportBtn').onclick = async () => {
-  if (!requireChat() || !state.peer) return;
+  if (!requireChat()) return;
+  if (!state.peer) { setStatus('No one to report — still finding you someone…'); return; }
   if (!confirm(`Report ${state.peer.username}?`)) return;
   await api('/api/report', { method: 'POST', body: { reported_id: state.peer.id, reason: 'reported from chat' } });
   sys('Reported. Finding someone new…'); $('nextBtn').click();
 };
 $('giftBtn').onclick = async () => {
-  if (!requireChat() || !state.peer) return;
+  if (!requireChat()) return;
+  if (!state.peer) { setStatus('No one to gift yet — still finding you someone…'); return; }
   const { gifts } = await api('/api/coins/packages');
   $('giftBtns').innerHTML = gifts.map(g =>
     `<button class="gift-pick" data-a="${g.amount}" title="${g.name} · ${g.amount} coins"><span class="ge">${g.emoji}</span><span class="ga">🪙${g.amount}</span><span class="gn">${g.name}</span></button>`
