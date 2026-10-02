@@ -53,7 +53,9 @@ header {
   font-size: 22px; font-weight: 800; letter-spacing: -.5px;
   background: linear-gradient(120deg, #fda4af, var(--acc1) 45%, var(--acc2));
   -webkit-background-clip: text; background-clip: text; color: transparent;
+  display: inline-flex; align-items: center; gap: 8px;
 }
+.logo .lips { width: 34px; height: 23px; flex: none; filter: drop-shadow(0 2px 8px rgba(251, 77, 109, .45)); }
 .head-right { display: flex; gap: 10px; align-items: center; }
 .coin-pill {
   background: var(--gold-bg); border: 1px solid rgba(251, 191, 36, .45); color: var(--gold);
@@ -84,7 +86,22 @@ header {
 }
 
 /* ---------- landing ---------- */
-#landing { text-align: center; padding: 64px 20px 40px; max-width: 760px; margin: 0 auto; }
+#landing {
+  text-align: center; padding: 64px 20px 40px; max-width: 760px; margin: 0 auto;
+  position: relative; overflow: hidden; border-radius: 30px;
+  border: 1px solid rgba(251, 77, 109, .22);
+  box-shadow: var(--shadow), 0 0 44px rgba(251, 77, 109, .1);
+  margin-top: 26px;
+}
+.hero-video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 0; opacity: .42;
+}
+.hero-shade {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(11,9,16,.62), rgba(11,9,16,.38) 45%, rgba(11,9,16,.82));
+}
+.hero-inner { position: relative; z-index: 1; }
 #landing h1 {
   font-size: 54px; line-height: 1.08; margin-bottom: 16px; letter-spacing: -1.5px; font-weight: 800;
   background: linear-gradient(115deg, #ffe4e6 10%, #fda4af 35%, var(--acc1) 60%, var(--acc2), #ffe4e6 95%);
