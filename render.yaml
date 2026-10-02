@@ -1,0 +1,14 @@
+# One-click deploy on Render: https://render.com → New → Blueprint → point at this repo.
+services:
+  - type: web
+    name: one-vs-one-chat
+    runtime: docker
+    plan: free
+    envVars:
+      - key: APP_URL
+        value: https://one-vs-one-chat.onrender.com
+      # Add your Stripe keys in the Render dashboard when ready to take payments:
+      # - key: STRIPE_SECRET_KEY
+      #   sync: false
+      # - key: STRIPE_WEBHOOK_SECRET
+      #   sync: false

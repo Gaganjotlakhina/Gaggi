@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1v1 Chat — Random Video Chat</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <div class="logo">⚡ 1v1 Chat</div>
+  <div class="head-right">
+    <div id="coinPill" class="coin-pill hidden">🪙 <span id="coinBal">0</span></div>
+    <button id="shopBtn" class="btn small hidden">Get Coins</button>
+    <button id="authBtn" class="btn small">Log in</button>
+  </div>
+</header>
+
+<!-- LANDING -->
+<section id="landing">
+  <h1>Meet a stranger.<br>One on one.</h1>
+  <p class="sub">Random 1v1 video chat. No feeds, no followers — just you and one person at a time.</p>
+  <button id="startBtn" class="btn big">▶ Start Chat</button>
+  <div class="filters-row hidden" id="filterRow">
+    <select id="fGender"><option value="">Any gender</option><option>male</option><option>female</option></select>
+    <input id="fCountry" placeholder="Country (e.g. Canada)">
+    <button id="unlockBtn" class="btn small ghost">Unlock filters 🪙100/24h</button>
+  </div>
+  <div class="cards">
+    <div class="card"><b>🎥 HD video</b><span>Face-to-face, instantly</span></div>
+    <div class="card"><b>⏭ Skip anytime</b><span>Not vibing? Next!</span></div>
+    <div class="card"><b>🎁 Coin gifts</b><span>Send coins to people you like</span></div>
+    <div class="card"><b>🛡 Report</b><span>One tap to report weirdos</span></div>
+  </div>
+  <p class="fine">18+ only. Be kind. Camera + mic required.</p>
+</section>
+
+<!-- CHAT -->
+<section id="chat" class="hidden">
+  <div class="videos">
+    <div class="vid-wrap"><video id="remoteV" autoplay playsinline></video><div id="peerName" class="tag">…</div></div>
+    <div class="vid-wrap self"><video id="localV" autoplay playsinline muted></video><div class="tag">You</div></div>
+  </div>
+  <div id="status" class="status">Finding someone…</div>
+  <div id="msgs"></div>
+  <div class="controls">
+    <input id="chatIn" placeholder="Say hi…" maxlength="500" autocomplete="off">
+    <button id="sendBtn" class="btn small">Send</button>
+  </div>
+  <div class="actions">
+    <button id="nextBtn" class="btn">⏭ Next</button>
+    <button id="giftBtn" class="btn ghost">🎁 Gift</button>
+    <button id="reportBtn" class="btn ghost danger">🚩 Report</button>
+    <button id="stopBtn" class="btn ghost">✕ Stop</button>
+  </div>
+</section>
+
+<!-- AUTH MODAL -->
+<div id="authModal" class="modal hidden">
+  <div class="box">
+    <h2 id="authTitle">Log in</h2>
+    <input id="aUser" placeholder="Username" autocomplete="username">
+    <input id="aPass" type="password" placeholder="Password" autocomplete="current-password">
+    <div id="regExtra" class="hidden">
+      <select id="aGender"><option value="">Gender (optional)</option><option>male</option><option>female</option></select>
+      <input id="aCountry" placeholder="Country (optional)">
+    </div>
+    <div id="authErr" class="err"></div>
+    <button id="authGo" class="btn big">Go</button>
+    <p class="swap"><a id="authSwap" href="#">Need an account? Register</a> · <a id="authClose" href="#">Close</a></p>
+  </div>
+</div>
+
+<!-- SHOP MODAL -->
+<div id="shopModal" class="modal hidden">
+  <div class="box">
+    <h2>🪙 Get Coins</h2>
+    <p class="sub">Coins unlock filters & let you send gifts.</p>
+    <div id="pkgs"></div>
+    <div id="shopErr" class="err"></div>
+    <p class="swap"><a id="shopClose" href="#">Close</a></p>
+  </div>
+</div>
+
+<!-- GIFT MODAL -->
+<div id="giftModal" class="modal hidden">
+  <div class="box">
+    <h2>🎁 Send a gift</h2>
+    <div id="giftBtns" class="gift-row"></div>
+    <p class="swap"><a id="giftClose" href="#">Close</a></p>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
