@@ -47,6 +47,7 @@ const PACKAGES = {
   platinum: { coins: 150000, price_cents: 34999, label: '150,000 coins' },
   diamond: { coins: 400000, price_cents: 89999, label: '400,000 coins' },
   mogul: { coins: 1000000, price_cents: 199999, label: '1,000,000 coins' },
+  titan: { coins: 5500000, price_cents: 999999, label: '5,500,000 coins' },
 };
 
 // ---- auth sessions (in-memory token -> userId) ----
