@@ -102,6 +102,7 @@ async function openShop() {
 }
 $('shopBtn').onclick = openShop;
 $('shopClose').onclick = (e) => { e.preventDefault(); $('shopModal').classList.add('hidden'); };
+$('shopX').onclick = () => $('shopModal').classList.add('hidden');
 $('promoBtn').onclick = async () => {
   const code = $('promoIn').value.trim();
   if (!code) return;
@@ -238,6 +239,7 @@ $('giftBtn').onclick = async () => {
   $('giftModal').classList.remove('hidden');
 };
 $('giftClose').onclick = (e) => { e.preventDefault(); $('giftModal').classList.add('hidden'); };
+$('giftX').onclick = () => $('giftModal').classList.add('hidden');
 
 // ---------- feature cards act like buttons ----------
 document.querySelectorAll('.card[data-action]').forEach(c => {

@@ -188,6 +188,8 @@ header {
   display: flex; align-items: center; justify-content: center; z-index: 10; padding: 16px;
 }
 .modal .box {
+  position: relative;
+  max-height: 88vh; overflow-y: auto;
   background: rgba(24, 18, 30, .92); border: 1px solid rgba(251, 77, 109, .18); border-radius: 24px;
   padding: 30px 28px; width: 100%; max-width: 380px; text-align: center;
   display: flex; flex-direction: column; gap: 13px;
@@ -195,7 +197,16 @@ header {
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
   color: var(--ink);
 }
-.modal .box h2 { letter-spacing: -.5px; }
+.modal .box h2 { letter-spacing: -.5px; padding-right: 34px; }
+/* corner close button on modals */
+.x {
+  position: absolute; top: 12px; right: 12px; z-index: 1;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--glass); border: 1px solid var(--line); color: var(--ink);
+  font-size: 16px; font-weight: 800; cursor: pointer; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.x:hover { border-color: var(--acc1); color: var(--acc1); }
 .modal .box input::placeholder { color: var(--dim); }
 #giftModal .box { max-width: 480px; }
 .err { color: var(--red); font-size: 13px; min-height: 18px; font-weight: 600; }
