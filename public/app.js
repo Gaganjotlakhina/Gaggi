@@ -243,3 +243,45 @@ $('giftClose').onclick = (e) => { e.preventDefault(); $('giftModal').classList.a
   await refreshMe();
   if (new URLSearchParams(location.search).get('coins') === 'success') { await refreshMe(); sys(''); alert('Coins added! 🪙'); history.replaceState({}, '', '/'); }
 })();
+
+/* ---------- drifting ember particles (noir luxe ambience) ---------- */
+(() => {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cv = document.getElementById('embers');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const N = Math.min(42, Math.max(18, Math.floor(innerWidth / 34)));
+  const cols = ['251,77,109', '245,158,11', '253,164,175', '251,191,36'];
+  let W, H, parts = [];
+  function size() {
+    W = cv.width = innerWidth; H = cv.height = innerHeight;
+  }
+  function spawn(top) {
+    return {
+      x: Math.random() * W,
+      y: top ? Math.random() * H : H + 8,
+      r: .7 + Math.random() * 2.1,
+      vy: .18 + Math.random() * .5,
+      vx: (Math.random() - .5) * .35,
+      a: .12 + Math.random() * .4,
+      tw: Math.random() * Math.PI * 2,
+      c: cols[(Math.random() * cols.length) | 0],
+    };
+  }
+  size(); addEventListener('resize', size);
+  for (let i = 0; i < N; i++) parts.push(spawn(true));
+  (function tick() {
+    ctx.clearRect(0, 0, W, H);
+    for (const p of parts) {
+      p.y -= p.vy; p.x += p.vx + Math.sin(p.y / 60) * .18; p.tw += .03;
+      if (p.y < -10) Object.assign(p, spawn(false));
+      const alpha = p.a * (0.55 + 0.45 * Math.sin(p.tw));
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, 7);
+      ctx.fillStyle = `rgba(${p.c},${alpha.toFixed(3)})`;
+      ctx.shadowColor = `rgba(${p.c},.8)`; ctx.shadowBlur = 8;
+      ctx.fill(); ctx.shadowBlur = 0;
+    }
+    requestAnimationFrame(tick);
+  })();
+})();
