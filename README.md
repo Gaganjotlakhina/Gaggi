@@ -1,4 +1,4 @@
-# 1v1 Chat — random 1-on-1 video chat with coins
+# Assi20Tuc20 — random 1-on-1 video chat with coins
 
 Omegle-style random video chat: hit **Start Chat**, get paired with a stranger,
 video + text, skip anytime. Coins buy filters and gifts; coins are bought with

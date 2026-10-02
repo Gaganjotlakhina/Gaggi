@@ -1,4 +1,4 @@
-// 1v1 chat client: auth, matchmaking, WebRTC, coins.
+// Assi20Tuc20 client: auth, matchmaking, WebRTC, coins.
 const $ = (id) => document.getElementById(id);
 const api = async (path, opts = {}) => {
   const r = await fetch(path, {
@@ -11,7 +11,7 @@ const api = async (path, opts = {}) => {
   return j;
 };
 
-const state = { token: localStorage.getItem('t1v1'), user: null, ws: null, roomId: null, peer: null, pc: null, local: null, mode: 'login' };
+const state = { token: localStorage.getItem('tassi20'), user: null, ws: null, roomId: null, peer: null, pc: null, local: null, mode: 'login' };
 
 // ---------- auth ----------
 function paintAuth() {
@@ -26,11 +26,11 @@ function paintAuth() {
   }
 }
 async function refreshMe() {
-  try { const { user } = await api('/api/me'); state.user = user; } catch { state.user = null; state.token = null; localStorage.removeItem('t1v1'); }
+  try { const { user } = await api('/api/me'); state.user = user; } catch { state.user = null; state.token = null; localStorage.removeItem('tassi20'); }
   paintAuth();
 }
 $('authBtn').onclick = () => {
-  if (state.user) { state.token = null; localStorage.removeItem('t1v1'); state.user = null; paintAuth(); return; }
+  if (state.user) { state.token = null; localStorage.removeItem('tassi20'); state.user = null; paintAuth(); return; }
   $('authModal').classList.remove('hidden');
 };
 $('authSwap').onclick = (e) => {
@@ -47,7 +47,7 @@ $('authGo').onclick = async () => {
     const body = { username: $('aUser').value.trim(), password: $('aPass').value };
     if (state.mode === 'register') { body.gender = $('aGender').value; body.country = $('aCountry').value.trim(); }
     const j = await api(state.mode === 'login' ? '/api/login' : '/api/register', { method: 'POST', body });
-    state.token = j.token; localStorage.setItem('t1v1', j.token); state.user = j.user;
+    state.token = j.token; localStorage.setItem('tassi20', j.token); state.user = j.user;
     $('authModal').classList.add('hidden'); paintAuth();
     sys(`Welcome, ${j.user.username}! +100 🪙 signup bonus`);
   } catch (e) { $('authErr').textContent = e.message; }

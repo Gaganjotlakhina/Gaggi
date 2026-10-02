@@ -1,4 +1,4 @@
-// 1v1 video chat server: Express REST + WebSocket matchmaking/signaling + Stripe coins.
+// Assi20Tuc20 server: Express REST + WebSocket matchmaking/signaling + Stripe coins.
 // Postgres-backed (DATABASE_URL). Run `npm start` after creating the database.
 const express = require('express');
 const http = require('http');
@@ -134,7 +134,7 @@ app.post('/api/coins/checkout', authz, async (req, res) => {
     line_items: [{
       price_data: {
         currency: 'usd',
-        product_data: { name: `${pkg.label} — 1v1 Chat` },
+        product_data: { name: `${pkg.label} — Assi20Tuc20` },
         unit_amount: pkg.price_cents,
       },
       quantity: 1,
@@ -310,5 +310,5 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 init().then(() => {
-  server.listen(PORT, () => console.log(`1v1 chat running at ${APP_URL}`));
+  server.listen(PORT, () => console.log(`Assi20Tuc20 running at ${APP_URL}`));
 }).catch((e) => { console.error('DB init failed:', e.message); process.exit(1); });
