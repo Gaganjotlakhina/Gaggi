@@ -25,9 +25,9 @@ const SIGNUP_BONUS = 100;
 const FILTERS_24H_COST = 100;
 const GIFT_AMOUNTS = [10, 25, 50, 100];
 const PACKAGES = {
-  starter: { coins: 500, price_cents: 499, label: '500 coins' },
-  popular: { coins: 1200, price_cents: 999, label: '1,200 coins' },
-  whale: { coins: 3000, price_cents: 1999, label: '3,000 coins' },
+  starter: { coins: 500, price_cents: 249, label: '500 coins' },
+  popular: { coins: 1200, price_cents: 499, label: '1,200 coins' },
+  whale: { coins: 3000, price_cents: 999, label: '3,000 coins' },
 };
 
 // ---- auth sessions (in-memory token -> userId) ----
