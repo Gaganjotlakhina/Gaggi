@@ -19,7 +19,7 @@ services:
           name: one-vs-one-chat-db
           property: connectionString
       - key: APP_URL
-        value: https://assi20tuc20.onrender.com
+        value: https://assi20tuc20.com
       # Add your Stripe keys in the Render dashboard when ready to take payments:
       # - key: STRIPE_SECRET_KEY
       #   sync: false
