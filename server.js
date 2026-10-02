@@ -41,6 +41,12 @@ const PACKAGES = {
   starter: { coins: 500, price_cents: 249, label: '500 coins' },
   popular: { coins: 1200, price_cents: 499, label: '1,200 coins' },
   whale: { coins: 3000, price_cents: 999, label: '3,000 coins' },
+  bronze: { coins: 10000, price_cents: 2999, label: '10,000 coins' },
+  silver: { coins: 25000, price_cents: 6999, label: '25,000 coins' },
+  gold: { coins: 60000, price_cents: 14999, label: '60,000 coins' },
+  platinum: { coins: 150000, price_cents: 34999, label: '150,000 coins' },
+  diamond: { coins: 400000, price_cents: 89999, label: '400,000 coins' },
+  mogul: { coins: 1000000, price_cents: 199999, label: '1,000,000 coins' },
 };
 
 // ---- auth sessions (in-memory token -> userId) ----
