@@ -89,7 +89,7 @@ async function initGoogle() {
 initGoogle();
 
 // ---------- coin shop ----------
-$('shopBtn').onclick = async () => {
+async function openShop() {
   $('shopModal').classList.remove('hidden');
   const { packages, stripe_ready } = await api('/api/coins/packages');
   $('pkgs').innerHTML = packages.map(p =>
@@ -99,7 +99,8 @@ $('shopBtn').onclick = async () => {
     try { const { url } = await api('/api/coins/checkout', { method: 'POST', body: { package_id: b.dataset.p } }); location.href = url; }
     catch (e) { $('shopErr').textContent = e.message; }
   });
-};
+}
+$('shopBtn').onclick = openShop;
 $('shopClose').onclick = (e) => { e.preventDefault(); $('shopModal').classList.add('hidden'); };
 $('promoBtn').onclick = async () => {
   const code = $('promoIn').value.trim();
@@ -237,6 +238,16 @@ $('giftBtn').onclick = async () => {
   $('giftModal').classList.remove('hidden');
 };
 $('giftClose').onclick = (e) => { e.preventDefault(); $('giftModal').classList.add('hidden'); };
+
+// ---------- feature cards act like buttons ----------
+document.querySelectorAll('.card[data-action]').forEach(c => {
+  c.onclick = () => {
+    const a = c.dataset.action;
+    if (a === 'shop') openShop();
+    else if (a === 'chat') startChat();
+    else if (a === 'report') alert('Start a chat — if someone acts up, one tap on 🚩 Report files it and skips you to the next person.');
+  };
+});
 
 // ---------- init ----------
 (async () => {
