@@ -55,7 +55,7 @@ header {
   -webkit-background-clip: text; background-clip: text; color: transparent;
   display: inline-flex; align-items: center; gap: 8px;
 }
-.logo .lips { width: 34px; height: 23px; flex: none; filter: drop-shadow(0 2px 8px rgba(251, 77, 109, .45)); }
+.logo .kiss { width: 40px; height: 26px; flex: none; filter: drop-shadow(0 2px 8px rgba(251, 77, 109, .45)); }
 .head-right { display: flex; gap: 10px; align-items: center; }
 .coin-pill {
   background: var(--gold-bg); border: 1px solid rgba(251, 191, 36, .45); color: var(--gold);
