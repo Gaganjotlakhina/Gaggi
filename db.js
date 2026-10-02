@@ -51,6 +51,24 @@ async function init() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_provider TEXT DEFAULT ''`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_sub TEXT DEFAULT ''`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth ON users (oauth_provider, oauth_sub) WHERE oauth_provider <> ''`);
+  // Tester accounts: unlimited coins, unlocked filters, ban-exempt (safe to re-run)
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tester BOOLEAN NOT NULL DEFAULT FALSE`);
+  // Promo codes (safe to re-run)
+  await pool.query(`CREATE TABLE IF NOT EXISTS promo_codes (
+    code TEXT PRIMARY KEY,
+    coins INTEGER NOT NULL DEFAULT 0,
+    max_uses INTEGER,
+    used_count INTEGER NOT NULL DEFAULT 0,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at BIGINT NOT NULL
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS promo_redemptions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    code TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    UNIQUE(user_id, code)
+  )`);
 }
 
 const now = () => Date.now();
@@ -115,4 +133,63 @@ async function transferCoins(fromId, toId, amount, giftLabel = '') {
   }
 }
 
-module.exports = { pool, init, now, getUser, addCoins, transferCoins };
+module.exports = { pool, init, now, getUser, addCoins, transferCoins, grantTester, createPromo, redeemPromo };
+
+async function createPromo(code, coins, maxUses) {
+  code = String(code || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{3,24}$/.test(code)) throw new Error('bad code format');
+  coins = Math.max(0, Math.floor(Number(coins) || 0));
+  maxUses = maxUses == null || maxUses === '' ? null : Math.max(1, Math.floor(Number(maxUses)));
+  await pool.query(
+    `INSERT INTO promo_codes (code, coins, max_uses, created_at)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (code) DO UPDATE SET coins = EXCLUDED.coins, max_uses = EXCLUDED.max_uses, active = TRUE`,
+    [code, coins, maxUses, Date.now()]
+  );
+  const r = await pool.query('SELECT * FROM promo_codes WHERE code = $1', [code]);
+  return r.rows[0];
+}
+
+// Atomically redeem a promo code for a user: validates, grants coins, records use.
+// Throws with a human-readable message on any failure.
+async function redeemPromo(userId, rawCode) {
+  const code = String(rawCode || '').trim().toUpperCase();
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    const r = await c.query('SELECT * FROM promo_codes WHERE code = $1 FOR UPDATE', [code]);
+    const p = r.rows[0];
+    if (!p) throw new Error('Invalid promo code.');
+    if (!p.active) throw new Error('This promo code is no longer active.');
+    if (p.max_uses != null && p.used_count >= p.max_uses) throw new Error('This promo code has run out.');
+    const already = await c.query('SELECT 1 FROM promo_redemptions WHERE user_id = $1 AND code = $2', [userId, code]);
+    if (already.rows[0]) throw new Error('You already used this code.');
+    await c.query('UPDATE users SET coins = coins + $1 WHERE id = $2', [p.coins, userId]);
+    await c.query(
+      'INSERT INTO coin_transactions (user_id, delta, reason, meta, created_at) VALUES ($1,$2,$3,$4,$5)',
+      [userId, p.coins, 'promo', code, Date.now()]
+    );
+    await c.query('INSERT INTO promo_redemptions (user_id, code, created_at) VALUES ($1,$2,$3)', [userId, code, Date.now()]);
+    await c.query('UPDATE promo_codes SET used_count = used_count + 1 WHERE code = $1', [code]);
+    await c.query('COMMIT');
+    const bal = await c.query('SELECT coins FROM users WHERE id = $1', [userId]);
+    return { coins: p.coins, balance: bal.rows[0].coins };
+  } catch (e) {
+    await c.query('ROLLBACK');
+    throw e;
+  } finally {
+    c.release();
+  }
+}
+async function grantTester(username) {
+  const r = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+  const u = r.rows[0];
+  if (!u) throw new Error('no such user');
+  const farFuture = Date.now() + 10 * 365 * 24 * 3600 * 1000; // ~10 years
+  await pool.query('UPDATE users SET coins = $1, filters_until = $2, tester = TRUE, banned_until = 0 WHERE id = $3',
+    [999999, farFuture, u.id]);
+  await pool.query(
+    'INSERT INTO coin_transactions (user_id, delta, reason, meta, created_at) VALUES ($1, $2, $3, $4, $5)',
+    [u.id, 999999 - u.coins, 'admin_grant', 'tester account', Date.now()]);
+  return getUser(u.id);
+}

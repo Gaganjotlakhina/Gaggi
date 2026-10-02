@@ -93,6 +93,19 @@ $('shopBtn').onclick = async () => {
   });
 };
 $('shopClose').onclick = (e) => { e.preventDefault(); $('shopModal').classList.add('hidden'); };
+$('promoBtn').onclick = async () => {
+  const code = $('promoIn').value.trim();
+  if (!code) return;
+  const msg = $('promoMsg');
+  msg.style.color = ''; msg.textContent = 'Checking…';
+  try {
+    const r = await api('/api/coins/redeem', { method: 'POST', body: { code } });
+    await refreshMe();
+    msg.style.color = 'var(--grn)';
+    msg.textContent = `+${r.coins} bonus coins added! 🎉`;
+    $('promoIn').value = '';
+  } catch (e) { msg.style.color = ''; msg.textContent = e.message || 'Invalid code.'; }
+};
 $('unlockBtn').onclick = async () => {
   try { const { user } = await api('/api/coins/unlock-filters', { method: 'POST' }); state.user = user; paintAuth(); }
   catch (e) { alert(e.message); }

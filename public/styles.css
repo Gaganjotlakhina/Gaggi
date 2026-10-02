@@ -166,6 +166,13 @@ header {
   background: rgba(255, 255, 255, .045); border: 1px solid var(--line); border-radius: 16px; padding: 13px 16px;
 }
 .pkg b { font-size: 15px; }
+.promo-row { display: flex; gap: 8px; margin-top: 14px; }
+.promo-row input {
+  flex: 1; background: rgba(255, 255, 255, .06); border: 1px solid var(--line); color: var(--ink);
+  padding: 10px 14px; border-radius: 999px; font-size: 14px; text-transform: uppercase;
+}
+.promo-row input::placeholder { color: var(--dim); text-transform: none; }
+.promo-row input:focus { border-color: var(--acc1); outline: none; box-shadow: 0 0 0 3px rgba(251, 77, 109, .22); }
 
 /* ---------- gift picker ---------- */
 .gift-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }

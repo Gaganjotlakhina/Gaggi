@@ -5,7 +5,7 @@ const http = require('http');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { WebSocketServer } = require('ws');
-const { pool, init, now, getUser, addCoins, transferCoins } = require('./db');
+const { pool, init, now, getUser, addCoins, transferCoins, grantTester, createPromo, redeemPromo } = require('./db');
 
 const PORT = process.env.PORT || 3000;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
@@ -225,11 +225,50 @@ app.post('/api/report', authz, async (req, res) => {
   await pool.query('INSERT INTO reports (reporter_id, reported_id, reason, created_at) VALUES ($1,$2,$3,$4)',
     [req.user.id, reportedId, String(req.body.reason || '').slice(0, 200), now()]);
   const c = await pool.query('SELECT COUNT(*)::int AS c FROM reports WHERE reported_id = $1', [reportedId]);
-  if (c.rows[0].c >= 5) {
+  const tu = await pool.query('SELECT tester FROM users WHERE id = $1', [reportedId]);
+  if (c.rows[0].c >= 5 && !tu.rows[0]?.tester) {
     await pool.query('UPDATE users SET banned_until = $1 WHERE id = $2', [now() + 24 * 3600 * 1000, reportedId]);
     dropUser(reportedId, 'banned');
   }
   res.json({ ok: true });
+});
+
+// Admin key check — ADMIN_KEY env var is set in the Render dashboard, never in the repo.
+function adminOk(req) {
+  const key = process.env.ADMIN_KEY || '';
+  const given = String((req.body && req.body.admin_key) || '');
+  if (!key || given.length !== key.length) return false;
+  try { return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(key)); }
+  catch { return false; }
+}
+
+// Admin: promote an existing user to tester (unlimited coins, unlocked filters, ban-exempt).
+app.post('/api/admin/grant', async (req, res) => {
+  if (!adminOk(req)) return res.status(403).json({ error: 'forbidden' });
+  const username = String((req.body && req.body.username) || '').trim().toLowerCase();
+  if (!username) return res.status(400).json({ error: 'username required' });
+  try {
+    const u = await grantTester(username);
+    res.json({ ok: true, user: publicUser(u) });
+  } catch { res.status(404).json({ error: 'no such user' }); }
+});
+
+// Admin: create (or update) a promo code. Body: { admin_key, code, coins, max_uses? }
+app.post('/api/admin/promo', async (req, res) => {
+  if (!adminOk(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const p = await createPromo(req.body.code, req.body.coins, req.body.max_uses);
+    res.json({ ok: true, promo: { code: p.code, coins: p.coins, max_uses: p.max_uses, used_count: p.used_count, active: p.active } });
+  } catch (e) { res.status(400).json({ error: e.message || 'bad promo' }); }
+});
+
+// Redeem a promo code for bonus coins (one use per user per code).
+app.post('/api/coins/redeem', authz, async (req, res) => {
+  try {
+    const r = await redeemPromo(req.user.id, req.body.code);
+    pushCoins(req.user.id, r.balance);
+    res.json({ ok: true, coins: r.coins, balance: r.balance });
+  } catch (e) { res.status(400).json({ error: e.message || 'redeem failed' }); }
 });
 
 // ---- WebSocket: matchmaking + signaling ----
