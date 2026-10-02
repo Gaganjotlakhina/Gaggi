@@ -1,10 +1,11 @@
 // 1v1 video chat server: Express REST + WebSocket matchmaking/signaling + Stripe coins.
+// Postgres-backed (DATABASE_URL). Run `npm start` after creating the database.
 const express = require('express');
 const http = require('http');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { WebSocketServer } = require('ws');
-const { db, now, addCoins } = require('./db');
+const { pool, init, now, getUser, addCoins } = require('./db');
 
 const PORT = process.env.PORT || 3000;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
@@ -35,12 +36,11 @@ const userIdFromReq = (req) => {
   const m = h.match(/^Bearer (.+)$/);
   return m ? sessions.get(m[1]) || null : null;
 };
-const getUser = (id) => db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 
 const app = express();
 
 // Stripe webhook needs the raw body — register before express.json().
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   if (!stripe || !STRIPE_WEBHOOK_SECRET) return res.status(500).send('webhook not configured');
   let event;
   try {
@@ -50,10 +50,11 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
   }
   if (event.type === 'checkout.session.completed') {
     const s = event.data.object;
-    const order = db.prepare('SELECT * FROM stripe_orders WHERE session_id = ?').get(s.id);
+    const r = await pool.query('SELECT * FROM stripe_orders WHERE session_id = $1', [s.id]);
+    const order = r.rows[0];
     if (order && order.status === 'pending') {
-      db.prepare("UPDATE stripe_orders SET status = 'complete' WHERE id = ?").run(order.id);
-      const balance = addCoins(order.user_id, order.coins, 'purchase', s.id);
+      await pool.query("UPDATE stripe_orders SET status = 'complete' WHERE id = $1", [order.id]);
+      const balance = await addCoins(order.user_id, order.coins, 'purchase', s.id);
       pushCoins(order.user_id, balance);
     }
   }
@@ -62,11 +63,12 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
 
 app.use(express.json());
 app.use(express.static('public'));
+app.get('/health', (req, res) => res.send('ok'));
 
-function authz(req, res, next) {
+async function authz(req, res, next) {
   const id = userIdFromReq(req);
   if (!id) return res.status(401).json({ error: 'login required' });
-  const u = getUser(id);
+  const u = await getUser(id);
   if (!u) return res.status(401).json({ error: 'login required' });
   if (u.banned_until > now()) return res.status(403).json({ error: 'account temporarily banned' });
   req.user = u;
@@ -75,32 +77,36 @@ function authz(req, res, next) {
 
 const publicUser = (u) => ({
   id: u.id, username: u.username, gender: u.gender, country: u.country,
-  coins: u.coins, filters_until: u.filters_until,
+  coins: u.coins, filters_until: Number(u.filters_until),
 });
 
 // ---- auth ----
-app.post('/api/register', (req, res) => {
+app.post('/api/register', async (req, res) => {
   const { username, password, gender = '', country = '' } = req.body || {};
   if (!username || !/^[a-zA-Z0-9_]{3,20}$/.test(username))
     return res.status(400).json({ error: 'username: 3-20 letters/numbers/_' });
   if (!password || password.length < 6)
     return res.status(400).json({ error: 'password: min 6 characters' });
-  if (db.prepare('SELECT id FROM users WHERE username = ?').get(username))
-    return res.status(400).json({ error: 'username taken' });
+  const exists = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
+  if (exists.rows[0]) return res.status(400).json({ error: 'username taken' });
   const hash = bcrypt.hashSync(password, 10);
-  const r = db.prepare(
-    'INSERT INTO users (username, password_hash, gender, country, coins, created_at) VALUES (?,?,?,?,?,?)'
-  ).run(username, hash, String(gender).slice(0, 20), String(country).slice(0, 40), SIGNUP_BONUS, now());
-  db.prepare(
-    'INSERT INTO coin_transactions (user_id, delta, reason, created_at) VALUES (?,?,?,?)'
-  ).run(r.lastInsertRowid, SIGNUP_BONUS, 'signup_bonus', now());
-  const u = getUser(r.lastInsertRowid);
+  const r = await pool.query(
+    'INSERT INTO users (username, password_hash, gender, country, coins, created_at) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+    [username, hash, String(gender).slice(0, 20), String(country).slice(0, 40), SIGNUP_BONUS, now()]
+  );
+  const uid = r.rows[0].id;
+  await pool.query(
+    'INSERT INTO coin_transactions (user_id, delta, reason, created_at) VALUES ($1,$2,$3,$4)',
+    [uid, SIGNUP_BONUS, 'signup_bonus', now()]
+  );
+  const u = await getUser(uid);
   res.json({ token: tokenFor(u.id), user: publicUser(u) });
 });
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body || {};
-  const u = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  const r = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+  const u = r.rows[0];
   if (!u || !bcrypt.compareSync(password || '', u.password_hash))
     return res.status(401).json({ error: 'bad username or password' });
   res.json({ token: tokenFor(u.id), user: publicUser(u) });
@@ -137,29 +143,30 @@ app.post('/api/coins/checkout', authz, async (req, res) => {
     cancel_url: `${APP_URL}/?coins=cancelled`,
     metadata: { user_id: String(req.user.id), package_id: req.body.package_id },
   });
-  db.prepare(
-    'INSERT INTO stripe_orders (user_id, session_id, package_id, coins, created_at) VALUES (?,?,?,?,?)'
-  ).run(req.user.id, session.id, req.body.package_id, pkg.coins, now());
+  await pool.query(
+    'INSERT INTO stripe_orders (user_id, session_id, package_id, coins, created_at) VALUES ($1,$2,$3,$4,$5)',
+    [req.user.id, session.id, req.body.package_id, pkg.coins, now()]
+  );
   res.json({ url: session.url });
 });
 
-app.post('/api/coins/unlock-filters', authz, (req, res) => {
+app.post('/api/coins/unlock-filters', authz, async (req, res) => {
   const u = req.user;
   if (u.filters_until > now()) return res.json({ user: publicUser(u) });
   if (u.coins < FILTERS_24H_COST) return res.status(402).json({ error: 'not enough coins' });
-  const balance = addCoins(u.id, -FILTERS_24H_COST, 'filters_24h');
-  db.prepare('UPDATE users SET filters_until = ? WHERE id = ?').run(now() + 24 * 3600 * 1000, u.id);
-  res.json({ user: publicUser(getUser(u.id)), balance });
+  const balance = await addCoins(u.id, -FILTERS_24H_COST, 'filters_24h');
+  await pool.query('UPDATE users SET filters_until = $1 WHERE id = $2', [now() + 24 * 3600 * 1000, u.id]);
+  res.json({ user: publicUser(await getUser(u.id)), balance });
 });
 
-app.post('/api/report', authz, (req, res) => {
+app.post('/api/report', authz, async (req, res) => {
   const reportedId = Number(req.body.reported_id);
   if (!reportedId || reportedId === req.user.id) return res.status(400).json({ error: 'bad report' });
-  db.prepare('INSERT INTO reports (reporter_id, reported_id, reason, created_at) VALUES (?,?,?,?)')
-    .run(req.user.id, reportedId, String(req.body.reason || '').slice(0, 200), now());
-  const count = db.prepare('SELECT COUNT(*) c FROM reports WHERE reported_id = ?').get(reportedId).c;
-  if (count >= 5) {
-    db.prepare('UPDATE users SET banned_until = ? WHERE id = ?').run(now() + 24 * 3600 * 1000, reportedId);
+  await pool.query('INSERT INTO reports (reporter_id, reported_id, reason, created_at) VALUES ($1,$2,$3,$4)',
+    [req.user.id, reportedId, String(req.body.reason || '').slice(0, 200), now()]);
+  const c = await pool.query('SELECT COUNT(*)::int AS c FROM reports WHERE reported_id = $1', [reportedId]);
+  if (c.rows[0].c >= 5) {
+    await pool.query('UPDATE users SET banned_until = $1 WHERE id = $2', [now() + 24 * 3600 * 1000, reportedId]);
     dropUser(reportedId, 'banned');
   }
   res.json({ ok: true });
@@ -205,11 +212,11 @@ const filtersOk = (mine, peerUser) => {
   return true;
 };
 
-function tryMatch() {
+async function tryMatch() {
   for (let i = 0; i < waiting.length; i++) {
     for (let j = i + 1; j < waiting.length; j++) {
       const A = waiting[i], B = waiting[j];
-      const uA = getUser(A.userId), uB = getUser(B.userId);
+      const uA = await getUser(A.userId), uB = await getUser(B.userId);
       if (!uA || !uB) continue;
       if (!filtersOk(A.filters, uB) || !filtersOk(B.filters, uA)) continue;
       waiting.splice(j, 1); waiting.splice(i, 1);
@@ -236,10 +243,10 @@ wss.on('connection', (ws, req, userId) => {
   clients.set(userId, ws);
   ws.userId = userId;
 
-  ws.on('message', (raw) => {
+  ws.on('message', async (raw) => {
     let m;
     try { m = JSON.parse(raw); } catch { return; }
-    const u = getUser(userId);
+    const u = await getUser(userId);
     if (!u || u.banned_until > now()) { ws.send(JSON.stringify({ type: 'kicked', reason: 'banned' })); return; }
 
     if (m.type === 'queue') {
@@ -274,11 +281,11 @@ wss.on('connection', (ws, req, userId) => {
       const amount = Number(m.amount);
       const r = rooms.get(m.roomId);
       if (!r || !GIFT_AMOUNTS.includes(amount)) return;
-      const me = getUser(userId);
+      const me = await getUser(userId);
       if (me.coins < amount) { ws.send(JSON.stringify({ type: 'error', error: 'not enough coins' })); return; }
       const peer = r.a === userId ? r.b : r.a;
-      addCoins(userId, -amount, 'gift_sent', `to:${peer}`);
-      const peerBal = addCoins(peer, amount, 'gift_received', `from:${userId}`);
+      await addCoins(userId, -amount, 'gift_sent', `to:${peer}`);
+      const peerBal = await addCoins(peer, amount, 'gift_received', `from:${userId}`);
       pushCoins(userId, me.coins - amount);
       pushCoins(peer, peerBal);
       const pws = clients.get(peer);
@@ -302,4 +309,6 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req, userId));
 });
 
-server.listen(PORT, () => console.log(`1v1 chat running at ${APP_URL}`));
+init().then(() => {
+  server.listen(PORT, () => console.log(`1v1 chat running at ${APP_URL}`));
+}).catch((e) => { console.error('DB init failed:', e.message); process.exit(1); });
