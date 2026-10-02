@@ -133,7 +133,22 @@ async function transferCoins(fromId, toId, amount, giftLabel = '') {
   }
 }
 
-module.exports = { pool, init, now, getUser, addCoins, transferCoins, grantTester, createPromo, redeemPromo };
+module.exports = { pool, init, now, getUser, addCoins, transferCoins, chargeCallMinute, grantTester, createPromo, redeemPromo };
+
+// Deduct per-minute call charges atomically: fails (throws) if balance < amount,
+// so a call minute can never push a balance negative.
+async function chargeCallMinute(userId, amount, roomId) {
+  const r = await pool.query(
+    'UPDATE users SET coins = coins - $1 WHERE id = $2 AND coins >= $1 RETURNING coins',
+    [amount, userId]
+  );
+  if (!r.rows[0]) throw new Error('not enough coins');
+  await pool.query(
+    'INSERT INTO coin_transactions (user_id, delta, reason, meta, created_at) VALUES ($1,$2,$3,$4,$5)',
+    [userId, -amount, 'call_minute', `room:${roomId}`, now()]
+  );
+  return r.rows[0].coins;
+}
 
 async function createPromo(code, coins, maxUses) {
   code = String(code || '').trim().toUpperCase();

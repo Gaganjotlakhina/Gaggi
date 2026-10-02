@@ -5,7 +5,7 @@ const http = require('http');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { WebSocketServer } = require('ws');
-const { pool, init, now, getUser, addCoins, transferCoins, grantTester, createPromo, redeemPromo } = require('./db');
+const { pool, init, now, getUser, addCoins, transferCoins, chargeCallMinute, grantTester, createPromo, redeemPromo } = require('./db');
 
 const PORT = process.env.PORT || 3000;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
@@ -38,17 +38,22 @@ const GIFT_CATALOG = [
 ];
 const GIFT_AMOUNTS = GIFT_CATALOG.map((g) => g.amount);
 const PACKAGES = {
-  starter: { coins: 500, price_cents: 249, label: '500 coins' },
-  popular: { coins: 1200, price_cents: 499, label: '1,200 coins' },
-  whale: { coins: 3000, price_cents: 999, label: '3,000 coins' },
-  bronze: { coins: 10000, price_cents: 2999, label: '10,000 coins' },
-  silver: { coins: 25000, price_cents: 6999, label: '25,000 coins' },
-  gold: { coins: 60000, price_cents: 14999, label: '60,000 coins' },
-  platinum: { coins: 150000, price_cents: 34999, label: '150,000 coins' },
-  diamond: { coins: 400000, price_cents: 89999, label: '400,000 coins' },
-  mogul: { coins: 1000000, price_cents: 199999, label: '1,000,000 coins' },
-  titan: { coins: 5500000, price_cents: 999999, label: '5,500,000 coins' },
+  starter: { coins: 500, price_cents: 249, label: '500 Moon Coins' },
+  popular: { coins: 1200, price_cents: 499, label: '1,200 Moon Coins' },
+  whale: { coins: 3000, price_cents: 999, label: '3,000 Moon Coins' },
+  bronze: { coins: 10000, price_cents: 2999, label: '10,000 Moon Coins' },
+  silver: { coins: 25000, price_cents: 6999, label: '25,000 Moon Coins' },
+  gold: { coins: 60000, price_cents: 14999, label: '60,000 Moon Coins' },
+  platinum: { coins: 150000, price_cents: 34999, label: '150,000 Moon Coins' },
+  diamond: { coins: 400000, price_cents: 89999, label: '400,000 Moon Coins' },
+  mogul: { coins: 1000000, price_cents: 199999, label: '1,000,000 Moon Coins' },
+  titan: { coins: 5500000, price_cents: 999999, label: '5,500,000 Moon Coins' },
 };
+
+// ---- per-minute call billing: 240 Moon Coins per started minute, charged only
+// while the user is actually on a video call (never while waiting in queue) ----
+const CALL_RATE = 240;
+const CALL_MIN_MS = 60_000;
 
 // ---- auth sessions (in-memory token -> userId) ----
 const sessions = new Map();
@@ -103,7 +108,7 @@ async function authz(req, res, next) {
 
 const publicUser = (u) => ({
   id: u.id, username: u.username, gender: u.gender, country: u.country,
-  coins: u.coins, filters_until: Number(u.filters_until),
+  coins: u.coins, filters_until: Number(u.filters_until), tester: !!u.tester,
 });
 
 // ---- auth ----
@@ -287,7 +292,7 @@ app.post('/api/coins/redeem', authz, async (req, res) => {
 const wss = new WebSocketServer({ noServer: true });
 const clients = new Map(); // userId -> ws
 const waiting = [];        // [{userId, ws, filters}]
-const rooms = new Map();   // roomId -> {a, b} userIds
+const rooms = new Map();   // roomId -> {a, b, timer} userIds + billing timer
 
 function pushCoins(userId, balance) {
   const ws = clients.get(userId);
@@ -309,6 +314,7 @@ function leaveQueue(userId) {
 function leaveRoom(userId) {
   for (const [roomId, r] of rooms) {
     if (r.a === userId || r.b === userId) {
+      stopBilling(roomId);
       const peer = r.a === userId ? r.b : r.a;
       rooms.delete(roomId);
       const pws = clients.get(peer);
@@ -317,6 +323,52 @@ function leaveRoom(userId) {
   }
 }
 
+// Charge one user for a started call minute. Testers (superusers) are exempt.
+async function billUser(userId, roomId) {
+  const u = await getUser(userId);
+  if (!u) return { ok: false };
+  if (u.tester) return { ok: true, free: true };
+  try {
+    const balance = await chargeCallMinute(userId, CALL_RATE, roomId);
+    pushCoins(userId, balance);
+    return { ok: true, balance };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function startBilling(roomId) {
+  const r = rooms.get(roomId);
+  if (!r || r.timer) return;
+  r.timer = setInterval(async () => {
+    const room = rooms.get(roomId);
+    if (!room) return;
+    for (const uid of [room.a, room.b]) {
+      const res = await billUser(uid, roomId);
+      if (!res.ok) { endCallForBroke(roomId, uid); break; }
+    }
+  }, CALL_MIN_MS);
+}
+
+function stopBilling(roomId) {
+  const r = rooms.get(roomId);
+  if (r && r.timer) { clearInterval(r.timer); r.timer = null; }
+}
+
+// Someone ran out of Moon Coins mid-call: end it for both sides.
+function endCallForBroke(roomId, brokeId) {
+  const r = rooms.get(roomId);
+  if (!r) return;
+  stopBilling(roomId);
+  const peer = r.a === brokeId ? r.b : r.a;
+  rooms.delete(roomId);
+  const bws = clients.get(brokeId), pws = clients.get(peer);
+  if (bws && bws.readyState === 1) bws.send(JSON.stringify({ type: 'call-ended', reason: 'out-of-coins' }));
+  if (pws && pws.readyState === 1) pws.send(JSON.stringify({ type: 'call-ended', reason: 'peer-out-of-coins' }));
+}
+
+const needsCoinsMsg = `You need at least ${CALL_RATE} Moon Coins for a minute of chat — tap Get Moon Coins.`;
+
 const filtersOk = (mine, peerUser) => {
   if (mine.gender && peerUser.gender !== mine.gender) return false;
   if (mine.country && (peerUser.country || '').toLowerCase() !== mine.country.toLowerCase()) return false;
@@ -324,19 +376,44 @@ const filtersOk = (mine, peerUser) => {
 };
 
 async function tryMatch() {
+  // Evict anyone who can't afford a minute (checked at queue time too, but
+  // balances can change while waiting). No charge while waiting — only on call.
+  for (let k = waiting.length - 1; k >= 0; k--) {
+    const w = waiting[k];
+    const u = await getUser(w.userId);
+    if (u && !u.tester && u.coins < CALL_RATE) {
+      waiting.splice(k, 1);
+      try { w.ws.send(JSON.stringify({ type: 'error', error: needsCoinsMsg })); } catch {}
+    }
+  }
   for (let i = 0; i < waiting.length; i++) {
     for (let j = i + 1; j < waiting.length; j++) {
       const A = waiting[i], B = waiting[j];
       const uA = await getUser(A.userId), uB = await getUser(B.userId);
       if (!uA || !uB) continue;
       if (!filtersOk(A.filters, uB) || !filtersOk(B.filters, uA)) continue;
-      waiting.splice(j, 1); waiting.splice(i, 1);
+      // First minute is charged up front, before the call starts (testers exempt).
       const roomId = crypto.randomBytes(8).toString('hex');
-      rooms.set(roomId, { a: A.userId, b: B.userId });
+      const ra = await billUser(A.userId, roomId);
+      if (!ra.ok) {
+        waiting.splice(i, 1);
+        try { A.ws.send(JSON.stringify({ type: 'error', error: needsCoinsMsg })); } catch {}
+        return;
+      }
+      const rb = await billUser(B.userId, roomId);
+      if (!rb.ok) {
+        if (!ra.free) { try { await addCoins(A.userId, CALL_RATE, 'call_minute_refund', `room:${roomId}`); } catch {} }
+        waiting.splice(j, 1);
+        try { B.ws.send(JSON.stringify({ type: 'error', error: needsCoinsMsg })); } catch {}
+        return;
+      }
+      waiting.splice(j, 1); waiting.splice(i, 1);
+      rooms.set(roomId, { a: A.userId, b: B.userId, timer: null });
       const peerA = { id: uB.id, username: uB.username, country: uB.country };
       const peerB = { id: uA.id, username: uA.username, country: uA.country };
       A.ws.send(JSON.stringify({ type: 'matched', roomId, peer: peerA, initiator: true }));
       B.ws.send(JSON.stringify({ type: 'matched', roomId, peer: peerB, initiator: false }));
+      startBilling(roomId);
       return;
     }
   }
@@ -365,7 +442,11 @@ wss.on('connection', (ws, req, userId) => {
       const f = m.filters || {};
       const wantFilters = !!(f.gender || f.country);
       if (wantFilters && u.filters_until <= now()) {
-        ws.send(JSON.stringify({ type: 'error', error: 'filters need unlocking (100 coins / 24h)' }));
+        ws.send(JSON.stringify({ type: 'error', error: 'filters need unlocking (100 Moon Coins / 24h)' }));
+        return;
+      }
+      if (!u.tester && u.coins < CALL_RATE) {
+        ws.send(JSON.stringify({ type: 'error', error: needsCoinsMsg }));
         return;
       }
       waiting.push({ userId, ws, filters: { gender: f.gender || '', country: f.country || '' } });
@@ -398,7 +479,7 @@ wss.on('connection', (ws, req, userId) => {
       try {
         balances = await transferCoins(userId, peer, amount, `${gift.emoji} ${gift.name}`);
       } catch (e) {
-        ws.send(JSON.stringify({ type: 'error', error: e.message === 'not enough coins' ? 'not enough coins' : 'gift failed, no coins moved' }));
+        ws.send(JSON.stringify({ type: 'error', error: e.message === 'not enough coins' ? 'not enough Moon Coins' : 'gift failed, no Moon Coins moved' }));
         return;
       }
       pushCoins(userId, balances.fromBalance);

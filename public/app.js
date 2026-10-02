@@ -112,7 +112,7 @@ $('promoBtn').onclick = async () => {
     const r = await api('/api/coins/redeem', { method: 'POST', body: { code } });
     await refreshMe();
     msg.style.color = 'var(--grn)';
-    msg.textContent = `+${r.coins} bonus coins added! 🎉`;
+    msg.textContent = `+${r.coins} bonus Moon Coins added! 🎉`;
     $('promoIn').value = '';
   } catch (e) { msg.style.color = ''; msg.textContent = e.message || 'Invalid code.'; }
 };
@@ -129,6 +129,7 @@ const RTC_CFG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls:
 
 async function startChat() {
   if (!state.user) { $('authModal').classList.remove('hidden'); return; }
+  if (state.user.coins < CALL_RATE) { alert(`You need at least ${CALL_RATE} Moon Coins for a minute of chat — tap Get Moon Coins.`); return; }
   try {
     state.local = await Promise.race([
       navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
@@ -155,12 +156,13 @@ function connectWS() {
     else if (m.type === 'matched') onMatched(m);
     else if (m.type === 'signal') onSignal(m.data);
     else if (m.type === 'chat') addMsg(m.from, m.text);
-    else if (m.type === 'gift') { giftMsg(`${m.from} sent you ${m.emoji || '🪙'} ${m.name || ''} (${m.amount} coins)!`); }
-    else if (m.type === 'gift-sent') giftMsg(`You sent ${m.emoji || '🪙'} ${m.name || ''} (${m.amount} coins)`);
-    else if (m.type === 'peer-left') { sys('Stranger left.'); cleanupPeer(); setStatus('Finding someone new…'); ws.send(JSON.stringify({ type: 'queue', filters: curFilters() })); }
+    else if (m.type === 'gift') { giftMsg(`${m.from} sent you ${m.emoji || '🪙'} ${m.name || ''} (${m.amount} Moon Coins)!`); }
+    else if (m.type === 'gift-sent') { giftMsg(`You sent ${m.emoji || '🪙'} ${m.name || ''} (${m.amount} Moon Coins)`); }
+    else if (m.type === 'peer-left') { stopCallTimer(); sys('Stranger left.'); cleanupPeer(); setStatus('Finding someone new…'); ws.send(JSON.stringify({ type: 'queue', filters: curFilters() })); }
+    else if (m.type === 'call-ended') { await onCallEnded(m.reason); }
     else if (m.type === 'coins') { state.user.coins = m.balance; paintAuth(); }
     else if (m.type === 'error') { setStatus('⚠ ' + m.error); }
-    else if (m.type === 'kicked') { alert('Kicked: ' + m.reason); stopAll(); }
+    else if (m.type === 'kicked') { stopCallTimer(); alert('Kicked: ' + m.reason); stopAll(); }
   };
   ws.onclose = () => setStatus('Disconnected.');
 }
@@ -174,6 +176,8 @@ async function onMatched(m) {
   $('peerName').textContent = m.peer.username + (m.peer.country ? ' · ' + m.peer.country : '');
   setStatus('Connected — say hi! 👋');
   sys(`You're chatting with ${m.peer.username}`);
+  if (!(state.user && state.user.tester)) sys(`⏱ ${CALL_RATE} Moon Coins per minute while you're on this call.`);
+  startCallTimer();
   cleanupPeer();
   const pc = new RTCPeerConnection(RTC_CFG);
   state.pc = pc;
@@ -199,6 +203,38 @@ async function onSignal(d) {
 }
 function cleanupPeer() { try { state.pc && state.pc.close(); } catch {} state.pc = null; $('remoteV').srcObject = null; }
 
+// ---------- per-minute call meter (240 Moon Coins / started minute) ----------
+const CALL_RATE = 240;
+let callTimer = null, callStart = 0;
+function startCallTimer() {
+  stopCallTimer();
+  callStart = Date.now();
+  const el = $('callMeter');
+  const paint = () => {
+    const s = Math.floor((Date.now() - callStart) / 1000);
+    const mins = Math.max(1, Math.ceil(s / 60));
+    el.textContent = state.user && state.user.tester
+      ? `⏱ ${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')} · tester — free`
+      : `⏱ ${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')} · ${mins * CALL_RATE} Moon Coins`;
+  };
+  paint();
+  callTimer = setInterval(paint, 1000);
+}
+function stopCallTimer() { if (callTimer) clearInterval(callTimer); callTimer = null; const el = $('callMeter'); if (el) el.textContent = ''; }
+
+async function onCallEnded(reason) {
+  stopCallTimer(); cleanupPeer(); state.peer = null; state.roomId = null;
+  await refreshMe();
+  if (reason === 'out-of-coins') {
+    alert("You're out of Moon Coins — top up to keep chatting.");
+    stopAll();
+  } else {
+    sys('Your partner ran out of coins. Finding someone new…');
+    setStatus('Finding someone new…');
+    state.ws.send(JSON.stringify({ type: 'queue', filters: curFilters() }));
+  }
+}
+
 $('sendBtn').onclick = sendChat;
 $('chatIn').onkeydown = (e) => { if (e.key === 'Enter') sendChat(); };
 function sendChat() {
@@ -210,9 +246,10 @@ function sendChat() {
 // These three actions only exist inside the signed-in chat view — but guard
 // explicitly anyway: no user, no ws connection => nothing happens.
 const requireChat = () => !!(state.user && state.ws && state.ws.readyState === 1);
-$('nextBtn').onclick = () => { if (!requireChat()) return; cleanupPeer(); setStatus('Finding someone…'); state.ws.send(JSON.stringify({ type: 'leave' })); state.ws.send(JSON.stringify({ type: 'queue', filters: curFilters() })); };
+$('nextBtn').onclick = () => { if (!requireChat()) return; stopCallTimer(); cleanupPeer(); setStatus('Finding someone…'); state.ws.send(JSON.stringify({ type: 'leave' })); state.ws.send(JSON.stringify({ type: 'queue', filters: curFilters() })); };
 $('stopBtn').onclick = stopAll;
 function stopAll() {
+  stopCallTimer();
   try { state.ws && state.ws.send(JSON.stringify({ type: 'leave' })); state.ws && state.ws.close(); } catch {}
   cleanupPeer();
   try { state.local && state.local.getTracks().forEach(t => t.stop()); } catch {}
@@ -230,7 +267,7 @@ $('giftBtn').onclick = async () => {
   if (!state.peer) { setStatus('No one to gift yet — still finding you someone…'); return; }
   const { gifts } = await api('/api/coins/packages');
   $('giftBtns').innerHTML = gifts.map(g =>
-    `<button class="gift-pick" data-a="${g.amount}" title="${g.name} · ${g.amount} coins"><span class="ge">${g.emoji}</span><span class="ga">🪙${g.amount}</span><span class="gn">${g.name}</span></button>`
+    `<button class="gift-pick" data-a="${g.amount}" title="${g.name} · ${g.amount} Moon Coins"><span class="ge">${g.emoji}</span><span class="ga">🪙${g.amount}</span><span class="gn">${g.name}</span></button>`
   ).join('');
   $('giftBtns').querySelectorAll('button').forEach(b => b.onclick = () => {
     state.ws.send(JSON.stringify({ type: 'gift', roomId: state.roomId, amount: Number(b.dataset.a) }));
@@ -254,7 +291,7 @@ document.querySelectorAll('.card[data-action]').forEach(c => {
 // ---------- init ----------
 (async () => {
   await refreshMe();
-  if (new URLSearchParams(location.search).get('coins') === 'success') { await refreshMe(); sys(''); alert('Coins added! 🪙'); history.replaceState({}, '', '/'); }
+  if (new URLSearchParams(location.search).get('coins') === 'success') { await refreshMe(); sys(''); alert('Moon Coins added! 🪙'); history.replaceState({}, '', '/'); }
 })();
 
 /* ---------- drifting ember particles (noir luxe ambience) ---------- */

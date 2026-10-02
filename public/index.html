@@ -14,7 +14,7 @@
   <div class="logo"><svg class="kiss" viewBox="0 0 80 52" aria-hidden="true"><defs><linearGradient id="kissg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fda4af"/><stop offset=".5" stop-color="#fb4d6d"/><stop offset="1" stop-color="#f59e0b"/></linearGradient></defs><path fill="url(#kissg)" d="M30 8C22 8 16 14 16 22C16 27 18 31 22 34L21 46L36 46C35.5 42 35.5 39 37.5 37C40 36 41.5 34.5 41 33C40.5 32 39.5 31.5 38.5 31.5C40 30.5 40.3 29.3 39.5 28.3C41 27.3 41.3 25.8 40.5 24.5C41 23 40.5 21.5 39.5 20.5C40 18 39.5 15.5 38 13.8C36 10.5 33.5 8 30 8Z"/><g transform="translate(81.5,0) scale(-1,1)"><path fill="url(#kissg)" d="M30 8C22 8 16 14 16 22C16 27 18 31 22 34L21 46L36 46C35.5 42 35.5 39 37.5 37C40 36 41.5 34.5 41 33C40.5 32 39.5 31.5 38.5 31.5C40 30.5 40.3 29.3 39.5 28.3C41 27.3 41.3 25.8 40.5 24.5C41 23 40.5 21.5 39.5 20.5C40 18 39.5 15.5 38 13.8C36 10.5 33.5 8 30 8Z"/><path fill="url(#kissg)" d="M31 7C23 7 17 12 16.5 20C16 28 19 34 25 38C21 32 20 26 22 20C24 14 28 9 34 8Z"/></g></svg> Assi20Tuc20</div>
   <div class="head-right">
     <div id="coinPill" class="coin-pill hidden">🪙 <span id="coinBal">0</span></div>
-    <button id="shopBtn" class="btn small hidden">Get Coins</button>
+    <button id="shopBtn" class="btn small hidden">Get Moon Coins</button>
     <button id="authBtn" class="btn small">Log in</button>
   </div>
 </header>
@@ -45,6 +45,7 @@
     <div class="vid-wrap self"><video id="localV" autoplay playsinline muted></video><div class="tag">You</div></div>
   </div>
   <div id="status" class="status">Finding someone…</div>
+  <div id="callMeter" class="call-meter"></div>
   <div id="msgs"></div>
   <div class="controls">
     <input id="chatIn" placeholder="Say hi…" maxlength="500" autocomplete="off">
@@ -85,8 +86,8 @@
 <div id="shopModal" class="modal hidden">
   <div class="box">
     <button class="x" id="shopX" aria-label="Close">✕</button>
-    <h2>🪙 Get Coins</h2>
-    <p class="sub">Coins unlock filters & let you send gifts.</p>
+    <h2>🪙 Get Moon Coins</h2>
+    <p class="sub">Moon Coins unlock filters & let you send gifts.</p>
     <div id="pkgs"></div>
     <div class="promo-row">
       <input id="promoIn" placeholder="Promo code" autocomplete="off">
