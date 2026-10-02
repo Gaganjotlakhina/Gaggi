@@ -42,4 +42,7 @@ header { display: flex; justify-content: space-between; align-items: center; pad
 .swap { font-size: 13px; color: var(--dim); } .swap a { color: var(--acc); }
 .pkg { display: flex; justify-content: space-between; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
 .gift-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.or { display: flex; align-items: center; gap: 10px; margin: 12px 0; color: var(--dim); font-size: 13px; }
+.or::before, .or::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
+#gBtn { display: flex; justify-content: center; margin-bottom: 6px; }
 @media (max-width: 640px) { .videos { grid-template-columns: 1fr; } #landing h1 { font-size: 38px; } }

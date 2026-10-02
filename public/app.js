@@ -53,6 +53,33 @@ $('authGo').onclick = async () => {
   } catch (e) { $('authErr').textContent = e.message; }
 };
 
+// ---------- Google sign-in ----------
+async function initGoogle() {
+  try {
+    const { googleClientId } = await (await fetch('/api/auth/config')).json();
+    if (!googleClientId) return;
+    const render = () => {
+      if (!window.google || !document.getElementById('gBtn')) return setTimeout(render, 300);
+      google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: async (resp) => {
+          $('authErr').textContent = '';
+          try {
+            const j = await api('/api/auth/google', { method: 'POST', body: { credential: resp.credential } });
+            state.token = j.token; localStorage.setItem('tassi20', j.token); state.user = j.user;
+            $('authModal').classList.add('hidden'); paintAuth();
+            sys(`Welcome, ${j.user.username}! Signed in with Google 🪙`);
+          } catch (e) { $('authErr').textContent = e.message; }
+        },
+      });
+      google.accounts.id.renderButton(document.getElementById('gBtn'),
+        { theme: 'filled_blue', size: 'large', text: 'continue_with', width: 260 });
+    };
+    render();
+  } catch {}
+}
+initGoogle();
+
 // ---------- coin shop ----------
 $('shopBtn').onclick = async () => {
   $('shopModal').classList.remove('hidden');

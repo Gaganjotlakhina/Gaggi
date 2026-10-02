@@ -15,6 +15,12 @@ const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
 let stripe = null;
 if (STRIPE_SECRET_KEY) stripe = require('stripe')(STRIPE_SECRET_KEY);
 
+let googleClient = null;
+if (process.env.GOOGLE_CLIENT_ID) {
+  const { OAuth2Client } = require('google-auth-library');
+  googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+}
+
 const SIGNUP_BONUS = 100;
 const FILTERS_24H_COST = 100;
 const GIFT_AMOUNTS = [10, 25, 50, 100];
@@ -113,6 +119,46 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.get('/api/me', authz, (req, res) => res.json({ user: publicUser(req.user) }));
+
+// ---- social login (Google) ----
+app.get('/api/auth/config', (req, res) => {
+  res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || null });
+});
+
+async function findOrCreateOAuthUser(provider, sub, email) {
+  const r = await pool.query('SELECT * FROM users WHERE oauth_provider = $1 AND oauth_sub = $2', [provider, sub]);
+  if (r.rows[0]) return r.rows[0];
+  let base = (String(email).split('@')[0] || 'user').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 14) || 'user';
+  if (base.length < 3) base = 'user' + base;
+  let username = base, n = 0;
+  while ((await pool.query('SELECT id FROM users WHERE username = $1', [username])).rows[0]) {
+    username = (base + (++n)).slice(0, 20);
+  }
+  const ins = await pool.query(
+    'INSERT INTO users (username, password_hash, oauth_provider, oauth_sub, coins, created_at) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+    [username, 'oauth', provider, sub, SIGNUP_BONUS, now()]
+  );
+  await pool.query('INSERT INTO coin_transactions (user_id, delta, reason, created_at) VALUES ($1,$2,$3,$4)',
+    [ins.rows[0].id, SIGNUP_BONUS, 'signup_bonus', now()]);
+  return (await pool.query('SELECT * FROM users WHERE id = $1', [ins.rows[0].id])).rows[0];
+}
+
+app.post('/api/auth/google', async (req, res) => {
+  if (!googleClient) return res.status(503).json({ error: 'Google login not configured' });
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: req.body.credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const p = ticket.getPayload();
+    if (!p.email_verified) return res.status(401).json({ error: 'email not verified' });
+    const u = await findOrCreateOAuthUser('google', p.sub, p.email);
+    if (u.banned_until > now()) return res.status(403).json({ error: 'account temporarily banned' });
+    res.json({ token: tokenFor(u.id), user: publicUser(u) });
+  } catch (e) {
+    res.status(401).json({ error: 'Google login failed' });
+  }
+});
 
 // ---- coins ----
 app.get('/api/coins/packages', (req, res) => {

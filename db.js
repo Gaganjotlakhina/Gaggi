@@ -47,6 +47,10 @@ async function init() {
     reason TEXT NOT NULL,
     created_at BIGINT NOT NULL
   );`);
+  // OAuth columns (added after launch — safe to re-run)
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_provider TEXT DEFAULT ''`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_sub TEXT DEFAULT ''`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth ON users (oauth_provider, oauth_sub) WHERE oauth_provider <> ''`);
 }
 
 const now = () => Date.now();
