@@ -193,7 +193,7 @@ app.post('/api/auth/google', async (req, res) => {
 // ---- coins ----
 app.get('/api/coins/packages', (req, res) => {
   res.json({
-    stripe_ready: !!stripe,
+    stripe_ready: false, // PAUSED 2026-10-07: Stripe account closed; re-enable when the new provider is wired
     packages: Object.entries(PACKAGES).map(([id, p]) => ({ id, ...p })),
     gift_amounts: GIFT_AMOUNTS,
     gifts: GIFT_CATALOG,

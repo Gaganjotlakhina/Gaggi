@@ -94,7 +94,7 @@ async function openShop() {
   const { packages, stripe_ready } = await api('/api/coins/packages');
   $('pkgs').innerHTML = packages.map(p =>
     `<div class="pkg"><span>🪙 ${p.label}</span><button class="btn small" data-p="${p.id}" ${stripe_ready ? '' : 'disabled'}>$${(p.price_cents / 100).toFixed(2)}</button></div>`
-  ).join('') + (stripe_ready ? '' : '<p class="fine">Payments not connected yet — ask the site owner.</p>');
+  ).join('') + (stripe_ready ? '' : '<p class="fine">Coin purchases are paused while we switch to a new payment provider — check back soon.</p>');
   $('pkgs').querySelectorAll('button[data-p]').forEach(b => b.onclick = async () => {
     try { const { url } = await api('/api/coins/checkout', { method: 'POST', body: { package_id: b.dataset.p } }); location.href = url; }
     catch (e) { $('shopErr').textContent = e.message; }
