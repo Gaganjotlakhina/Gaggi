@@ -1,7 +1,7 @@
 // Live billing test: 100 Moon Coins/min charged only while on a video call.
 // Flow: register payer+peer, redeem WELCOME500 each, match, verify balance drops
 // 100 at match (minute 1) and another 100 at 60s (minute 2). Also verifies a
-// 100-coin user is rejected from the queue.
+// fresh 100-coin user is accepted to the queue, and a 0-coin user is rejected.
 const WebSocket = require('ws');
 
 const BASE = 'https://assi20tuc20.com';
@@ -84,15 +84,34 @@ const waitFor = (ws, type, ms = 30000) => new Promise((res, rej) => {
   if (a3 !== 400) throw new Error('charged after call ended!');
   wsA.close(); wsB.close();
 
-  // 6. broke user (100 coins) must be rejected from queue
+  // 6. fresh 100-coin user is ACCEPTED to the queue (new 100 minimum)
   const C = await makeUser('billC_');
   const wsC = await connect(C.token);
+  const qP = waitFor(wsC, 'queued');
+  wsC.send(JSON.stringify({ type: 'queue', filters: {} }));
+  await qP;
+  console.log('100-coin user accepted to queue ✓');
+
+  // 7. broke user (0 coins after one matched minute) must be rejected from queue
+  const D = await makeUser('billD_');
+  const wsD = await connect(D.token);
+  const mP = waitFor(wsD, 'matched');
+  wsD.send(JSON.stringify({ type: 'queue', filters: {} }));
+  await mP;
+  console.log('C+D matched ✓ (minute-1 charged)');
+  await sleep(2500);
+  const c0 = await me(C.token);
+  console.log(`C balance after match: ${c0} (want 0)`);
+  if (c0 !== 0) throw new Error('minute-1 charge wrong for C');
+  wsC.send(JSON.stringify({ type: 'leave' }));
+  wsD.send(JSON.stringify({ type: 'leave' }));
+  await sleep(2000);
   const errP = waitFor(wsC, 'error');
   wsC.send(JSON.stringify({ type: 'queue', filters: {} }));
   const err = await errP;
   console.log('broke user rejected ✓:', err.error);
   if (!/100/.test(err.error)) throw new Error('wrong rejection message');
-  wsC.close();
+  wsC.close(); wsD.close();
 
   console.log('ALL BILLING TESTS PASSED ✓');
   process.exit(0);
