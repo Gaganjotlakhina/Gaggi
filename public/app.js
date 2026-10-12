@@ -203,8 +203,8 @@ async function onSignal(d) {
 }
 function cleanupPeer() { try { state.pc && state.pc.close(); } catch {} state.pc = null; $('remoteV').srcObject = null; }
 
-// ---------- per-minute call meter (240 Moon Coins / started minute) ----------
-const CALL_RATE = 240;
+// ---------- per-minute call meter (100 Moon Coins / started minute) ----------
+const CALL_RATE = 100;
 let callTimer = null, callStart = 0;
 function startCallTimer() {
   stopCallTimer();

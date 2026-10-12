@@ -50,9 +50,9 @@ const PACKAGES = {
   titan: { coins: 5500000, price_cents: 999999, label: '5,500,000 Moon Coins' },
 };
 
-// ---- per-minute call billing: 240 Moon Coins per started minute, charged only
+// ---- per-minute call billing: 100 Moon Coins per started minute, charged only
 // while the user is actually on a video call (never while waiting in queue) ----
-const CALL_RATE = 240;
+const CALL_RATE = 100;
 const CALL_MIN_MS = 60_000;
 
 // ---- auth sessions (in-memory token -> userId) ----
